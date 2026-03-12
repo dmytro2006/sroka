@@ -1,3 +1,4 @@
+use std::process::exit;
 use crate::State::Start;
 
 #[derive(Debug)]
@@ -11,9 +12,9 @@ enum Operator {
 
 #[derive(Debug)]
 #[derive(PartialEq)]
-enum Parentheses{
+enum Parentheses {
     Open,
-    Close
+    Close,
 }
 
 #[repr(u8)]
@@ -23,7 +24,7 @@ enum Token {
     Number(i32) = 0,
     Operator(Operator),
     Identifier(String),
-    Parentheses(Parentheses)
+    Parentheses(Parentheses),
 }
 
 enum State {
@@ -64,7 +65,7 @@ impl DAS {
             id_buffer: String::new(),
         }
     }
-    fn update(self: &mut Self, input: char, next: char) -> Option<Token> {
+    fn update(self: &mut Self, input: char, next: char) -> Result<Option<Token>, ()> {
         match &mut self.current {
             Start => {
                 self.number_buffer = 0;
@@ -73,27 +74,28 @@ impl DAS {
                     '0'..='9' => {
                         self.number_buffer = self.number_buffer * 10 + as_digit(input);
                         if !is_digit(next) {
-                            return Some(Token::Number(self.number_buffer));
+                            return Ok(Some(Token::Number(self.number_buffer)));
                         }
                         self.current = State::Q1;
                     }
-                    '+' => return Some(Token::Operator(Operator::Plus)),
-                    '-' => return Some(Token::Operator(Operator::Minus)),
-                    '*' => return Some(Token::Operator(Operator::Multiply)),
-                    '/' => return Some(Token::Operator(Operator::Divide)),
-                    '(' => return Some(Token::Parentheses(Parentheses::Open)),
-                    ')' => return Some(Token::Parentheses(Parentheses::Close)),
+                    '+' => return Ok(Some(Token::Operator(Operator::Plus))),
+                    '-' => return Ok(Some(Token::Operator(Operator::Minus))),
+                    '*' => return Ok(Some(Token::Operator(Operator::Multiply))),
+                    '/' => return Ok(Some(Token::Operator(Operator::Divide))),
+                    '(' => return Ok(Some(Token::Parentheses(Parentheses::Open))),
+                    ')' => return Ok(Some(Token::Parentheses(Parentheses::Close))),
                     'a'..'z' => {
                         self.id_buffer.push(input);
                         if !is_variablable(next) {
-                            return Some(Token::Identifier(self.id_buffer.clone()));
+                            return Ok(Some(Token::Identifier(self.id_buffer.clone())));
                         }
                         self.current = State::Q2;
                     }
-                    ' ' => {
-                    }
+                    ' ' => {}
+                    '\t' => {}
+                    '\n' => {}
                     _ => {
-                        panic!("blad")
+                        return Err(());
                     }
                 }
             }
@@ -102,7 +104,7 @@ impl DAS {
                     self.number_buffer = self.number_buffer * 10 + as_digit(input);
                     if !is_digit(next) {
                         self.current = State::Start;
-                        return Some(Token::Number(self.number_buffer));
+                        return Ok(Some(Token::Number(self.number_buffer)));
                     }
                 }
                 _ => {}
@@ -112,13 +114,13 @@ impl DAS {
                     self.id_buffer.push(input);
                     if !is_variablable(next) {
                         self.current = State::Start;
-                        return Some(Token::Identifier(self.id_buffer.clone()));
+                        return Ok(Some(Token::Identifier(self.id_buffer.clone())));
                     }
                 }
                 _ => {}
             },
         }
-        return None;
+        return Ok(None);
     }
 }
 
@@ -138,12 +140,23 @@ impl Scanner {
         let mut das = DAS::new();
         let mut tokens = Vec::new();
         for i in 0..self.text.len() - 1 {
-            let token = das.update(
-                self.text.chars().nth(i).unwrap(),
-                self.text.chars().nth(i + 1).unwrap(),
-            );
-            if let Some(token) = token {
-                tokens.push(token);
+            let a = self.text.chars().nth(i).unwrap();
+            let b = self.text.chars().nth(i + 1).unwrap();
+            let result = das.update(a, b);
+
+            match result {
+                Ok(Some(token)) => tokens.push(token),
+                Err(()) => {
+                    eprintln!("{}", self.text);
+                    for _ in 0..i {
+                        eprint!(".");
+                    }
+                    eprint!("^ Tutaj\n");
+
+                    eprintln!("Niedozwolony znak: '{}' na pozycji {}", a, i);
+                    exit(-1);
+                }
+                _ => {}
             }
         }
         return tokens;
@@ -151,14 +164,14 @@ impl Scanner {
 }
 
 fn main() {
-    let sc = Scanner::new("f)".to_owned());
+    let sc = Scanner::new("2034     324+;dfuishefi".to_owned());
     for token in sc.skaner() {
         println!("TOKEN: {:?}", token);
     }
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use crate::{Scanner, Token, Operator, Parentheses};
 
     #[test]
