@@ -20,7 +20,7 @@ pub enum State{
 }
 
 pub fn is_accepting(c: State) -> bool {
-    match(c) {
+    match c {
         State::Start => false,
         State::BuildingDigit => true,
         State::BuildingIdentifier => true,

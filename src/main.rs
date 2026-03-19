@@ -36,8 +36,8 @@ impl Scanner {
         Scanner { text }
     }
 
-    fn build_token(prevState: State, buff: &mut String) -> Token {
-        match prevState {
+    fn build_token(prev_state: State, buff: &mut String) -> Token {
+        match prev_state {
             State::BuildingDigit => {
                 let skipped = buff.chars().filter(|c| *c != ' ').collect::<String>();
                 Token::Number(skipped.parse::<i32>().unwrap())
@@ -49,7 +49,7 @@ impl Scanner {
             State::OpenParentheses => Token::Parentheses(Parentheses::Open),
             State::CloseParentheses => Token::Parentheses(Parentheses::Close),
             State::Asterisk => Token::Operator(Operator::Multiply),
-            _ => panic!("f"),
+            _ => unreachable!(),
         }
     }
 
@@ -67,7 +67,7 @@ impl Scanner {
         );
         exit(-1);
     }
-    fn skaner(self: &Self) -> Vec<Token> {
+    fn scan(self: &Self) -> Vec<Token> {
         let mut das = dfa::State::Start;
         let mut buff = String::new();
 
@@ -114,7 +114,7 @@ impl Scanner {
 
 fn main() {
     let sc = Scanner::new("2034     324+6 fad;sf".to_owned());
-    for token in sc.skaner() {
+    for token in sc.scan() {
         println!("TOKEN: {:?}", token);
     }
 }
@@ -127,7 +127,7 @@ mod tests {
     fn test_numbers_and_plus() {
         let sc = Scanner::new("1+2+3".to_owned());
 
-        let tokens = sc.skaner();
+        let tokens = sc.scan();
 
         assert_eq!(
             tokens,
@@ -145,7 +145,7 @@ mod tests {
     fn test_identifier_and_number() {
         let sc = Scanner::new("abc+12".to_owned());
 
-        let tokens = sc.skaner();
+        let tokens = sc.scan();
 
         assert_eq!(
             tokens,
@@ -161,7 +161,7 @@ mod tests {
     fn test_parentheses_and_multiply() {
         let sc = Scanner::new("(a*3)".to_owned());
 
-        let tokens = sc.skaner();
+        let tokens = sc.scan();
 
         assert_eq!(
             tokens,
