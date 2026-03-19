@@ -1,8 +1,10 @@
-use std::process::exit;
-use crate::State::Start;
+pub mod dfa;
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+use std::process::exit;
+use crate::dfa::characters::parse_character;
+use crate::dfa::State;
+
+#[derive(Debug, PartialEq)]
 enum Operator {
     Plus,
     Minus,
@@ -10,118 +12,19 @@ enum Operator {
     Divide,
 }
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum Parentheses {
     Open,
     Close,
 }
 
 #[repr(u8)]
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum Token {
     Number(i32) = 0,
     Operator(Operator),
     Identifier(String),
     Parentheses(Parentheses),
-}
-
-enum State {
-    Start,
-    Q1,
-    Q2,
-}
-
-struct DAS {
-    current: State,
-    number_buffer: i32,
-    id_buffer: String,
-}
-
-fn as_digit(ch: char) -> i32 {
-    ch as i32 - '0' as i32
-}
-
-fn is_digit(ch: char) -> bool {
-    let digit = as_digit(ch);
-    0 <= digit && digit <= 9
-}
-
-fn is_variablable(ch: char) -> bool {
-    match ch {
-        '0'..='9' => true,
-        '_' => true,
-        'a'..='z' => true,
-        _ => false,
-    }
-}
-
-impl DAS {
-    fn new() -> Self {
-        Self {
-            current: Start,
-            number_buffer: 0,
-            id_buffer: String::new(),
-        }
-    }
-    fn update(self: &mut Self, input: char, next: char) -> Result<Option<Token>, ()> {
-        match &mut self.current {
-            Start => {
-                self.number_buffer = 0;
-                self.id_buffer.clear();
-                match input {
-                    '0'..='9' => {
-                        self.number_buffer = self.number_buffer * 10 + as_digit(input);
-                        if !is_digit(next) {
-                            return Ok(Some(Token::Number(self.number_buffer)));
-                        }
-                        self.current = State::Q1;
-                    }
-                    '+' => return Ok(Some(Token::Operator(Operator::Plus))),
-                    '-' => return Ok(Some(Token::Operator(Operator::Minus))),
-                    '*' => return Ok(Some(Token::Operator(Operator::Multiply))),
-                    '/' => return Ok(Some(Token::Operator(Operator::Divide))),
-                    '(' => return Ok(Some(Token::Parentheses(Parentheses::Open))),
-                    ')' => return Ok(Some(Token::Parentheses(Parentheses::Close))),
-                    'a'..'z' => {
-                        self.id_buffer.push(input);
-                        if !is_variablable(next) {
-                            return Ok(Some(Token::Identifier(self.id_buffer.clone())));
-                        }
-                        self.current = State::Q2;
-                    }
-                    ' ' => {}
-                    '\t' => {}
-                    '\n' => {}
-                    _ => {
-                        return Err(());
-                    }
-                }
-            }
-            State::Q1 => match input {
-                '0'..='9' => {
-                    self.number_buffer = self.number_buffer * 10 + as_digit(input);
-                    if !is_digit(next) {
-                        self.current = State::Start;
-                        return Ok(Some(Token::Number(self.number_buffer)));
-                    }
-                }
-                _ => {}
-            },
-            State::Q2 => match input {
-                '0'..='9' | 'a'..='z' | '_' => {
-                    self.id_buffer.push(input);
-                    if !is_variablable(next) {
-                        self.current = State::Start;
-                        return Ok(Some(Token::Identifier(self.id_buffer.clone())));
-                    }
-                }
-                _ => {}
-            },
-        }
-        return Ok(None);
-    }
 }
 
 struct Scanner {
@@ -130,41 +33,77 @@ struct Scanner {
 
 impl Scanner {
     fn new(text: String) -> Self {
-        let mut t = text;
-        t.push('!');
-        Scanner {
-            text: t,
-        }
+        Scanner { text }
+    }
+
+    fn build_token(prevState: State, buff: &mut String) -> Token{
+       match prevState {
+           State::BuildingDigit => {
+               let skipped = buff.chars().filter(|c| *c != ' ').collect::<String>();
+               Token::Number(skipped.parse::<i32>().unwrap())
+           },
+           State::BuildingIdentifier => Token::Identifier(buff.clone()),
+           State::Plus => Token::Operator(Operator::Plus),
+           State::Minus => Token::Operator(Operator::Minus),
+           State::Slash => Token::Operator(Operator::Divide),
+           State::OpenParentheses => Token::Parentheses(Parentheses::Open),
+           State::CloseParentheses => Token::Parentheses(Parentheses::Close),
+           State::Asterisk => Token::Operator(Operator::Multiply),
+           _ => panic!("f"),
+       }
     }
     fn skaner(self: &Self) -> Vec<Token> {
-        let mut das = DAS::new();
+        let mut das = dfa::State::Start;
+        let mut buff = String::new();
+
         let mut tokens = Vec::new();
-        for i in 0..self.text.len() - 1 {
-            let a = self.text.chars().nth(i).unwrap();
-            let b = self.text.chars().nth(i + 1).unwrap();
-            let result = das.update(a, b);
 
-            match result {
-                Ok(Some(token)) => tokens.push(token),
-                Err(()) => {
-                    eprintln!("{}", self.text);
-                    for _ in 0..i {
-                        eprint!(".");
-                    }
-                    eprint!("^ Tutaj\n");
+        for i in 0..self.text.len() - 1{
+            let curr_char = self.text.chars().nth(i).unwrap();
+            let next_char = self.text.chars().nth(i + 1).unwrap();
 
-                    eprintln!("Niedozwolony znak: '{}' na pozycji {}", a, i);
-                    exit(-1);
-                }
-                _ => {}
+            let current_character = parse_character(curr_char).unwrap();
+            let next_character = parse_character(next_char).unwrap();
+
+            das = dfa::transition(das, current_character);
+            buff.push(curr_char);
+
+            let try_next_das = dfa::transition(das, next_character);
+            if try_next_das == dfa::State::End {
+                let tok = Self::build_token(das,&mut buff);
+                tokens.push(tok);
+                buff.clear();
+                das = dfa::State::Start;
             }
         }
+        buff.push(self.text.chars().last().unwrap());
+        das = dfa::transition(das, parse_character(self.text.chars().last().unwrap()).unwrap());
+
+        let tok = Self::build_token(das,&mut buff);
+        tokens.push(tok);
+
+
+        //     match result {
+        //         Ok(Some(token)) => tokens.push(token),
+        //         Err(()) => {
+        //             eprintln!("{}", self.text);
+        //             for _ in 0..i {
+        //                 eprint!(".");
+        //             }
+        //             eprint!("^ Tutaj\n");
+        //
+        //             eprintln!("Niedozwolony znak: '{}' na pozycji {}", a, i);
+        //             exit(-1);
+        //         }
+        //         _ => {}
+        //     }
+        // }
         return tokens;
     }
 }
 
 fn main() {
-    let sc = Scanner::new("2034     324+;dfuishefi".to_owned());
+    let sc = Scanner::new("2034     324+6 fadsf".to_owned());
     for token in sc.skaner() {
         println!("TOKEN: {:?}", token);
     }
@@ -172,7 +111,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Scanner, Token, Operator, Parentheses};
+    use crate::{Operator, Parentheses, Scanner, Token};
 
     #[test]
     fn test_numbers_and_plus() {
