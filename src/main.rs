@@ -1,8 +1,8 @@
 pub mod dfa;
 
-use std::process::exit;
-use crate::dfa::characters::parse_character;
 use crate::dfa::State;
+use crate::dfa::characters::parse_character;
+use std::process::exit;
 
 #[derive(Debug, PartialEq)]
 enum Operator {
@@ -36,21 +36,36 @@ impl Scanner {
         Scanner { text }
     }
 
-    fn build_token(prevState: State, buff: &mut String) -> Token{
-       match prevState {
-           State::BuildingDigit => {
-               let skipped = buff.chars().filter(|c| *c != ' ').collect::<String>();
-               Token::Number(skipped.parse::<i32>().unwrap())
-           },
-           State::BuildingIdentifier => Token::Identifier(buff.clone()),
-           State::Plus => Token::Operator(Operator::Plus),
-           State::Minus => Token::Operator(Operator::Minus),
-           State::Slash => Token::Operator(Operator::Divide),
-           State::OpenParentheses => Token::Parentheses(Parentheses::Open),
-           State::CloseParentheses => Token::Parentheses(Parentheses::Close),
-           State::Asterisk => Token::Operator(Operator::Multiply),
-           _ => panic!("f"),
-       }
+    fn build_token(prevState: State, buff: &mut String) -> Token {
+        match prevState {
+            State::BuildingDigit => {
+                let skipped = buff.chars().filter(|c| *c != ' ').collect::<String>();
+                Token::Number(skipped.parse::<i32>().unwrap())
+            }
+            State::BuildingIdentifier => Token::Identifier(buff.clone()),
+            State::Plus => Token::Operator(Operator::Plus),
+            State::Minus => Token::Operator(Operator::Minus),
+            State::Slash => Token::Operator(Operator::Divide),
+            State::OpenParentheses => Token::Parentheses(Parentheses::Open),
+            State::CloseParentheses => Token::Parentheses(Parentheses::Close),
+            State::Asterisk => Token::Operator(Operator::Multiply),
+            _ => panic!("f"),
+        }
+    }
+
+    fn error(text: &str, pos: usize) {
+        eprintln!("{}", text);
+        for _ in 0..pos {
+            eprint!(".");
+        }
+        eprint!("^ Tutaj\n");
+
+        eprintln!(
+            "Niedozwolony znak: '{}' na pozycji {}",
+            text.chars().nth(pos).unwrap(),
+            pos
+        );
+        exit(-1);
     }
     fn skaner(self: &Self) -> Vec<Token> {
         let mut das = dfa::State::Start;
@@ -58,52 +73,47 @@ impl Scanner {
 
         let mut tokens = Vec::new();
 
-        for i in 0..self.text.len() - 1{
+        for i in 0..self.text.len() - 1 {
             let curr_char = self.text.chars().nth(i).unwrap();
             let next_char = self.text.chars().nth(i + 1).unwrap();
 
-            let current_character = parse_character(curr_char).unwrap();
-            let next_character = parse_character(next_char).unwrap();
+            let current_character = parse_character(curr_char).unwrap_or_else(|| {
+                Self::error(self.text.as_str(), i);
+                exit(-1);
+            });
+            let next_character = parse_character(next_char).unwrap_or_else(|| {
+                Self::error(self.text.as_str(), i + 1);
+                exit(-1);
+            });
 
             das = dfa::transition(das, current_character);
             buff.push(curr_char);
 
             let try_next_das = dfa::transition(das, next_character);
             if try_next_das == dfa::State::End {
-                let tok = Self::build_token(das,&mut buff);
+                let tok = Self::build_token(das, &mut buff);
                 tokens.push(tok);
                 buff.clear();
                 das = dfa::State::Start;
             }
         }
-        buff.push(self.text.chars().last().unwrap());
-        das = dfa::transition(das, parse_character(self.text.chars().last().unwrap()).unwrap());
+        let last_char = self.text.chars().last().unwrap();
+        let last_character = parse_character(last_char).unwrap_or_else(|| {
+            Self::error(self.text.as_str(), self.text.len() - 1);
+            exit(-1);
+        });
+        buff.push(last_char);
+        das = dfa::transition(das, last_character);
 
-        let tok = Self::build_token(das,&mut buff);
+        let tok = Self::build_token(das, &mut buff);
         tokens.push(tok);
 
-
-        //     match result {
-        //         Ok(Some(token)) => tokens.push(token),
-        //         Err(()) => {
-        //             eprintln!("{}", self.text);
-        //             for _ in 0..i {
-        //                 eprint!(".");
-        //             }
-        //             eprint!("^ Tutaj\n");
-        //
-        //             eprintln!("Niedozwolony znak: '{}' na pozycji {}", a, i);
-        //             exit(-1);
-        //         }
-        //         _ => {}
-        //     }
-        // }
         return tokens;
     }
 }
 
 fn main() {
-    let sc = Scanner::new("2034     324+6 fadsf".to_owned());
+    let sc = Scanner::new("2034     324+6 fad;sf".to_owned());
     for token in sc.skaner() {
         println!("TOKEN: {:?}", token);
     }
